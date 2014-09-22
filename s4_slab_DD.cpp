@@ -18,12 +18,15 @@ double wt[]={0.3478548451,0.6521451549,0.6521451549,0.3478548451};
 int cal_psi(double EDGE[],int n_EDGE,double NFM[],int n_NFM,double SigT[],double SigS[],double RegMat[],double Source[])
 {
 	int totNFM=0;
-	for(int i=0;i<n_NFM;i++){
+	int i;
+#pragma omp parallel for private(i) shared(n_NFM) reduction(+:totNFM)
+	for(i=0;i<n_NFM;i++){
 		totNFM+=NFM[i];
 	}
 	double psi[totNFM+1][4];
 	double phi[totNFM];
-	for(int i=0;i<totNFM;i++)
+#pragma omp parallel for private(i) shared(totNFM,phi)
+	for(i=0;i<totNFM;i++)
 		phi[i]=0.0;
 	double S[totNFM][4];
 	double Q[totNFM][4];
@@ -35,21 +38,27 @@ int cal_psi(double EDGE[],int n_EDGE,double NFM[],int n_NFM,double SigT[],double
 	//compute discretization
 
 	int sum=0;
+	int k,j;
+#pragma omp parallel for private(i,k,j) default(shared)
+	{
 	for(int i=0;i<n_NFM;i++){
-		for(int k=sum;k<sum+NFM[i];k++){
+		for(k=sum;k<sum+NFM[i];k++){
 			Delta[k]=(EDGE[i+1]-EDGE[i])/NFM[i];
 			fmmid[k]=RegMat[i];
-			for (int j=0;j<4;j++)
+			for (j=0;j<4;j++)
 				S[k][j]=Source[i];
 		}
 		sum=sum+NFM[i];
 	}
-
+}
 
 	//precompute coefficients, following Eqs. 20.16-20.20
 
 	int alpha=0;
-	for (int i=0;i<totNFM;i++){
+	int n;
+#pragma omp parallel for private(i,n) shared(A,B,mu,SigT,Delta)
+	{
+	for (i=0;i<totNFM;i++){
 		int m=fmmid[i];
 		for (int n=0;n<4;n++){
 			int smu;
@@ -65,6 +74,7 @@ int cal_psi(double EDGE[],int n_EDGE,double NFM[],int n_NFM,double SigT[],double
 		    B[i][n]=smu*2*Delta[i]/demon;
 			}
 		}
+	}
 
 
 	//convergence parameters
@@ -130,6 +140,7 @@ int cal_psi(double EDGE[],int n_EDGE,double NFM[],int n_NFM,double SigT[],double
 }
 
 int main(){
+	double wtime=omp_get_wtime();
 	double edge[]={0,2,4,6,9,10,16};
 	double nfm[]={100,361,150,300,264};
 	double regmat[]={0,1,2,3,4,4};
@@ -149,5 +160,7 @@ int main(){
 	}
 */
 	cal_psi(edge,7,nfm,6,sigt,sigs,regmat,source);
+	wtime=omp_get_wtime()-wtime;
+	cout<<wtime<<endl;
 	return 0;
 }
